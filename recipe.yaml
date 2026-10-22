@@ -2,7 +2,7 @@ $engine: 3
 $minFxVersion: 12913
 $onesync: "on"
 name: RPS Framework
-version: 0.3.4
+version: 0.3.5
 author: RPS
 description: |
   Lightweight roleplay framework: characters, money, jobs and permissions (rps_core),
@@ -57,6 +57,10 @@ tasks:
     ref: main
     dest: ./resources/[rps]/rps_ambulance
 
+  - action: download_github
+    src: https://github.com/Project-Silverline/rps_multicharacter
+    ref: main
+    dest: ./resources/[rps]/rps_multicharacter
 
   # --- install/ (SQL, bridges, docs) from the recipe repo -----------------------
   - action: download_github
