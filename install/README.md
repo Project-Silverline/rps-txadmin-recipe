@@ -1,52 +1,82 @@
-# RPS Framework – Install
+# RPS Framework – txAdmin recipe
+
+One-click deploy of the RPS roleplay framework with txAdmin. The recipe downloads every
+resource, installs the RPS bridges into ox_inventory and illenium-appearance, sets up the
+database and writes a ready `server.cfg`. Nothing has to be copied or edited by hand.
+
+## What gets installed
+
+| Folder | Contents | Version |
+| --- | --- | --- |
+| `resources/[cfx-default]` | chat, spawnmanager, mapmanager, sessionmanager, basic-gamemode, hardcap | cfx-server-data `c6afa39` |
+| `resources/[ox]` | oxmysql | v2.14.3 |
+| | ox_lib | v3.40.0 |
+| | ox_inventory, with the `rps` bridge, table mapping and `medkit` item | v2.48.0 |
+| `resources/[standalone]` | illenium-appearance, with the `rps` bridge and an EMS changing room | v5.7.0 |
+| `resources/[rps]` | rps_core, rps_ambulance | from this repo |
+| `rps-docs/` | Framework documentation | from this repo |
+
+Database: `users`, `characters`, `rps_vehicles` and the four illenium-appearance tables.
+ox_inventory adds its own table and columns on first start. Requires FXServer 12913 or
+newer (oxmysql's minimum) and OneSync, which the recipe turns on.
+
+## Repo layout
 
 ```
-RPS_Framework/
-  [rps]/                         ← copy this whole folder into your server's resources folder
-    rps_core/
-    rps_ambulance/
-  install/                       ← setup files and documentation (not a resource)
-    README.md                      this file
-    RPS_Framework_Documentation.md full reference
-    rps_core.md                    rps_core quick reference
-    rps_ambulance.md               rps_ambulance quick reference
-    SETUP_ox_inventory.md          inventory setup
-    SETUP_illenium-appearance.md   appearance and clothing setup
-    server.cfg.example
-    sql/install.sql                fresh install
-    sql/migrations/                updates for existing databases
-    ox_inventory/                  bridge files to copy into ox_inventory
-    illenium-appearance/           bridge files to copy into illenium-appearance
+recipe.yaml       ← what txAdmin reads
+server.cfg        ← template; {{placeholders}} are filled by txAdmin
+sql/install.sql   ← full database schema
+resources/[rps]/  ← rps_core, rps_ambulance
+bridges/          ← files copied into ox_inventory and illenium-appearance
+docs/             ← documentation, copied to rps-docs/ on the server
 ```
 
-## Requirements
+## 1. Put it on GitHub
 
-FiveM server with OneSync enabled, MySQL or MariaDB, and these resources:
-[oxmysql](https://github.com/overextended/oxmysql/releases),
-[ox_lib](https://github.com/overextended/ox_lib/releases),
-[ox_inventory](https://github.com/overextended/ox_inventory/releases),
-[illenium-appearance](https://github.com/iLLeniumStudios/illenium-appearance/releases).
-Download the release zips, not the source code.
+1. Create a **public** repo, for example `rps-txadmin-recipe`, and push these files to it.
+2. Open `recipe.yaml` and change the one line marked `CHANGE THIS`:
 
-## Steps
+   ```yaml
+   src: https://github.com/YOUR_GITHUB_USER/rps-txadmin-recipe
+   ```
 
-1. **Database.** Fresh install: run `sql/install.sql`.
-   Existing RPS database: run each file in `sql/migrations/` you haven't run yet.
-2. **Resources.** Copy the `[rps]` folder into your `resources` folder. Keep the folder
-   names exactly as they are, because exports are called by resource name.
-3. **ox_inventory.** Follow `SETUP_ox_inventory.md`: copy the bridge, make the one edit in
-   `modules/mysql/server.lua`, and add the `medkit` item.
-4. **illenium-appearance.** Follow `SETUP_illenium-appearance.md`: copy the bridge and add
-   two lines to its `fxmanifest.lua`.
-5. **server.cfg.** Add the lines from `server.cfg.example`, including the `add_ace resource.ox_lib` lines (groups and admin commands don't work without them). Keep the start order:
-   oxmysql, ox_lib, rps_core, ox_inventory, illenium-appearance, rps_ambulance. Remove any other framework
-   (ESX, QBCore, Qbox).
-6. **Admin.** Join once, then in the server console run `setgroup <your server id> admin`.
-7. **Check positions in-game.** The hospital respawn, check-in, EMS locker and supply shop
-   coordinates in `rps_ambulance/config.lua` and the selection camera in
-   `rps_core/shared/config.lua` are untested defaults.
+   Commit and push again.
+3. Recommended: tag a release (`git tag v0.3.0 && git push --tags`) and set `ref: v0.3.0`
+   on that task instead of `main`, so later pushes can't change what a deploy installs.
+4. Open `recipe.yaml` on GitHub, click **Raw**, and copy the URL:
 
-After updating ox_inventory or illenium-appearance, redo step 3 or 4: updates overwrite
-the bridge and the edit.
+   ```
+   https://raw.githubusercontent.com/YOUR_GITHUB_USER/rps-txadmin-recipe/main/recipe.yaml
+   ```
 
-Full reference: `RPS_Framework_Documentation.md`.
+## 2. Deploy with txAdmin
+
+1. In the txAdmin setup wizard choose **Remote URL Template** and paste the raw URL.
+   On an existing server: **Settings → Master Actions → Reset FXServer**, then run the
+   setup again. Use a new profile to keep your current server untouched.
+2. Enter your server name, license key (from portal.cfx.re) and database details. Leave
+   the database name empty to let txAdmin create one.
+3. Review the generated `server.cfg` and save. Start the server.
+4. Your txAdmin account is added to `group.admin` automatically. To make your character an
+   RPS admin too, join once and run `setgroup <your server id> admin` in the live console.
+
+## After deploying
+
+- Check the positions in `resources/[rps]/rps_ambulance/config.lua` (hospital, check-in,
+  EMS locker, supply shop) and the selection camera in `rps_core/shared/config.lua`. They
+  are untested defaults.
+- The EMS changing room added to illenium-appearance's `shared/config.lua` is also an
+  untested position.
+- Updating ox_inventory or illenium-appearance later overwrites the bridges. Redeploy, or
+  follow `rps-docs/SETUP_ox_inventory.md` and `rps-docs/SETUP_illenium-appearance.md`.
+
+## Updating the recipe
+
+To move to a newer ox or illenium release, change its URL in `recipe.yaml`. Pick a release
+that has been out for a couple of weeks, check the patch targets still exist (the
+`search` strings in the `replace_string` tasks), and test on a fresh profile first. If a
+deploy fails, the deployer log names the failing task; the usual causes are a wrong path or
+a `search` string that no longer matches.
+
+Note: `replace_string` treats `search` as a regular expression, which is why dots, braces
+and brackets in the searches are escaped with `\`.

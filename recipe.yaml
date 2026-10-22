@@ -2,11 +2,12 @@ $engine: 3
 $minFxVersion: 12913
 $onesync: "on"
 name: RPS Framework
-version: 0.3.1
+version: 0.3.2
 author: RPS
 description: |
-  Lightweight roleplay framework: characters, money, jobs and permissions (rps_core),
-  death, respawn and EMS (rps_ambulance), with ox_inventory and illenium-appearance.
+  Lightweight roleplay framework: characters, money, jobs and permissions (rps_core).
+  rps_ambulance, ox_inventory and illenium-appearance will be added once their
+  RPS bridges are published.
 
 tasks:
   # --- Default CFX resources (chat, spawnmanager, ...) -------------------------
@@ -31,114 +32,18 @@ tasks:
     src: ./tmp/ox_lib.zip
     dest: ./resources/[ox]
 
-  - action: download_file
-    url: https://github.com/overextended/ox_inventory/releases/download/v2.48.0/ox_inventory.zip
-    path: ./tmp/ox_inventory.zip
-  - action: unzip
-    src: ./tmp/ox_inventory.zip
-    dest: ./resources/[ox]
-
-  # --- illenium-appearance (pinned release build) ------------------------------
-  - action: download_file
-    url: https://github.com/iLLeniumStudios/illenium-appearance/releases/download/v5.7.0/illenium-appearance.zip
-    path: ./tmp/illenium-appearance.zip
-  - action: unzip
-    src: ./tmp/illenium-appearance.zip
-    dest: ./resources/[standalone]
-
-  # --- RPS framework, from its own GitHub repo -------------------------------
-  # CHANGE THIS: your GitHub user/repo for the framework, and the tag or branch to deploy.
+  # --- rps_core (the repo root is the resource) --------------------------------
   - action: download_github
     src: https://github.com/Project-Silverline/rps_core
     ref: main
-    dest: ./tmp/rps
+    dest: ./resources/[rps]/rps_core
 
-  - action: move_path
-    src: ./tmp/rps/[rps]
-    dest: ./resources/[rps]
-
+  # --- install/ (SQL, bridges, docs) from the recipe repo -----------------------
   - action: download_github
-    src: https://github.com/Project-Silverline/rps_core
+    src: https://github.com/Project-Silverline/rps-txadmin-recipe
     ref: main
-    dest: ./tmp/rps
-
-  - action: move_path
-    src: ./tmp/rps/[rps]
-    dest: ./resources/[rps]
-
-  # --- ox_inventory: rps bridge, table mapping, medkit item --------------------
-  - action: copy_path
-    src: ./tmp/install/ox_inventory/modules/bridge/rps
-    dest: ./resources/[ox]/ox_inventory/modules/bridge
-
-  - action: replace_string
-    mode: literal
-    file: ./resources/[ox]/ox_inventory/modules/mysql/server.lua
-    search: 'elseif shared.framework == ''qbx'' then'
-    replace: |-
-      elseif shared.framework == 'rps' then
-              playerTable = 'characters'
-              playerColumn = 'id'
-              vehicleTable = 'rps_vehicles'
-              vehicleColumn = 'id'
-          elseif shared.framework == 'qbx' then
-
-  - action: replace_string
-    mode: literal
-    file: ./resources/[ox]/ox_inventory/data/items.lua
-    search: '[''bandage''] = {'
-    replace: |-
-      ['medkit'] = {
-              label = 'Medkit',
-              weight = 500,
-              stack = true,
-              close = true,
-              description = 'Used by paramedics to revive unconscious patients',
-              client = {
-                  export = 'rps_ambulance.medkit',
-              },
-          },
-
-          ['bandage'] = {
-
-  # --- illenium-appearance: rps bridge, manifest entries, EMS changing room ----
-  - action: copy_path
-    src: ./tmp/install/illenium-appearance/client/framework/rps
-    dest: ./resources/[standalone]/illenium-appearance/client/framework'
-
-  - action: copy_path
-    src: ./tmp/install/illenium-appearance/server/framework/rps
-    dest: ./resources/[standalone]/illenium-appearance/server/framework
-
-  - action: replace_string
-    mode: literal
-    file: ./resources/[standalone]/illenium-appearance/fxmanifest.lua
-    search: '"client/framework/ox/main.lua",'
-    replace: |-
-      "client/framework/ox/main.lua",
-        "client/framework/rps/main.lua",
-
-  - action: replace_string
-    mode: literal
-    file: ./resources/[standalone]/illenium-appearance/fxmanifest.lua
-    search: '"server/framework/ox/main.lua",'
-    replace: |-
-      "server/framework/ox/main.lua",
-        "server/framework/rps/main.lua",
-
-  - action: replace_string
-    mode: literal
-    file: ./resources/[standalone]/illenium-appearance/shared/config.lua
-    search: 'Config.ClothingRooms = {'
-    replace: |-
-      Config.ClothingRooms = {
-          {
-              job = "ambulance",
-              coords = vector4(334.0, -1402.5, 32.5, 50.0),
-              size = vector3(3, 3, 3),
-              rotation = 50,
-              usePoly = false,
-          },
+    subpath: install
+    dest: ./tmp/install
 
   # --- server.cfg (written from this recipe, then filled in by txAdmin) ----------
   - action: write_file
@@ -160,11 +65,6 @@ tasks:
       ## Database
       set mysql_connection_string "{{dbConnectionString}}"
 
-      ## ox_inventory (setr, not set: clients need these too)
-      setr inventory:framework "rps"
-      setr inventory:slots 40
-      setr inventory:weight 30000
-
       ## Default CFX resources
       ensure mapmanager
       ensure chat
@@ -177,11 +77,8 @@ tasks:
       ensure oxmysql
       ensure ox_lib
 
-      ## RPS (order matters)
+      ## RPS
       ensure rps_core
-      ensure ox_inventory
-      ensure illenium-appearance
-      ensure rps_ambulance
 
       ## Permissions
       add_ace group.admin command allow
@@ -206,12 +103,8 @@ tasks:
   - action: connect_database
 
   - action: query_database
-    file: ./tmp/rps/install/sql/install.sql
+    file: ./tmp/install/sql/install.sql
 
-  # --- Docs and clean-up --------------------------------------------------------
-  - action: move_path
-    src: ./tmp/install
-    dest: ./rps-install
-
+  # --- Clean-up -----------------------------------------------------------------
   - action: remove_path
     path: ./tmp
