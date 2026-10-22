@@ -2,7 +2,7 @@ $engine: 3
 $minFxVersion: 12913
 $onesync: "on"
 name: RPS Framework
-version: 0.3.7
+version: 0.3.8
 author: RPS
 description: |
   Lightweight roleplay framework: characters, money, jobs and permissions (rps_core),
@@ -37,6 +37,13 @@ tasks:
   - action: unzip
     src: ./tmp/ox_inventory.zip
     dest: ./resources/[ox]
+  
+  - action: download_file
+    url: https://github.com/TGIANN/tgiann-target/releases/download/v1.3.0/tgiann-target.zip
+    path: ./tmp/tgiann-target.zip
+  - action: unzip
+    src: ./tmp/tgiann-target.zip
+    dest: ./resources/[ox]
 
   # --- illenium-appearance (pinned release build) ------------------------------
   - action: download_file
@@ -61,6 +68,11 @@ tasks:
     src: https://github.com/Project-Silverline/rps_multicharacter
     ref: main
     dest: ./resources/[rps]/rps_multicharacter
+
+  - action: download_github
+    src: https://github.com/Project-Silverline/rps_hud
+    ref: main
+    dest: ./resources/[rps]/rps_hud
 
   # --- install/ (SQL, bridges, docs) from the recipe repo -----------------------
   - action: download_github
@@ -212,6 +224,7 @@ tasks:
       ## Dependencies
       ensure oxmysql
       ensure ox_lib
+      ensure tgiann-target
 
       ## RPS framework start order
 

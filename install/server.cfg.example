@@ -14,3 +14,4 @@ ensure ox_inventory
 ensure illenium-appearance
 ensure rps_ambulance
 ensure rps_multicharacter
+ensure rps_hud

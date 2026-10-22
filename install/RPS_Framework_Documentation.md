@@ -39,6 +39,13 @@ Design principles:
   client/hospital.lua      hospital blip and check-in point
   client/supplies.lua      EMS locker and supply shop points
 
+[rps]/rps_hud/             ps-hud 2.1.2 ported to rps_core (GPL-3.0)
+  config.lua               menu key, speed unit, fuel script, admin-only layout
+  client.lua, server.lua   rps_core data -> HUD, settings menu, /dev
+  locale.lua, locales/     translations (qb_locale convar picks the language)
+  html/                    built interface; svelte-source/ is its source
+  stream/                  square and circle minimap textures
+
 [rps]/rps_multicharacter/  (required: rps_core has no character menu of its own)
   fxmanifest.lua
   config.lua               preview spot, camera, default models, join delay
@@ -85,6 +92,7 @@ ensure ox_inventory
 ensure illenium-appearance
 ensure rps_ambulance
 ensure rps_multicharacter
+ensure rps_hud
 
 add_ace resource.ox_lib command.add_ace allow
 add_ace resource.ox_lib command.remove_ace allow
@@ -114,6 +122,10 @@ All settings live in `rps_core/shared/config.lua` and `rps_ambulance/config.lua`
 | `Groups` | user, mod, admin | Permission groups from lowest to highest; each inherits the ones below |
 | `DefaultModel` | freemode male and female | Ped model by sex, used until illenium-appearance applies the saved look |
 | `DefaultSpawn` | vec4 near Legion Square | First spawn for new characters |
+| `Notify` | top, 5000 ms | Default position and duration for notifications (top-right is rps_hud's money panel) |
+| `Commands` | see file | `/me` distance and duration, `/givecash` range, `/report` cooldown |
+| `Needs` | on; hunger -1, thirst -1.5 per minute | Hunger and thirst decay, damage at 0, fixed item values |
+| `Stress` | on | Stress gain from shooting and speeding, relief over time and from items, screen effects |
 | `SaveInterval` | 300000 ms | Auto-save period for all loaded players |
 | `PaycheckInterval` | 900000 ms | How often salaries are paid to bank |
 | `Jobs` | in `shared/jobs.lua` | Job definitions (see Jobs, groups and permissions) |
@@ -187,6 +199,7 @@ end
 | `GetJobs()` | The `Config.Jobs` table |
 | `GetGroups()` | `Config.Groups`, lowest to highest |
 | `HasGroup(source, group)` | true if the player's group is `group` or higher |
+| `Notify(source, message, type?, duration?, title?)` | Shows an ox_lib notification; `message` can also be a `lib.notify` table. `source` -1 = everyone |
 | `RegisterUsableItem(name, cb, style?)` | Runs `cb` when the item is used from ox_inventory (see below) |
 | `CanUseItem(name)` | true if a usable-item callback is registered |
 | `UseItem(source, name, slot)` | Runs the registered callback (ox_inventory calls this) |
@@ -240,7 +253,24 @@ The client holds a read-only copy of the local player's data, kept in sync by se
 | `exports.rps_core:GetPlayerData()` | `charId`, `charinfo`, `accounts`, `job`, `group`, `metadata`, `position` |
 | `exports.rps_core:IsLoaded()` | true once a character is spawned |
 | `exports.rps_core:GetJobs()` | The `Config.Jobs` table |
+| `exports.rps_core:Notify(message, type?, duration?, title?)` | Shows an ox_lib notification (see below) |
 | `exports.rps_ambulance:IsDead()` | true while the local player is downed |
+
+### Notifications
+
+One function on both sides, drawn by ox_lib with the position and duration from `Config.Notify`:
+
+```lua
+-- client
+exports.rps_core:Notify('Paycheck received', 'success')
+exports.rps_core:Notify('Low fuel', 'warning', 8000, 'Vehicle')
+exports.rps_core:Notify({ title = 'Bank', description = 'Transfer sent', type = 'success', icon = 'building-columns' })
+
+-- server: same arguments after the player's server id (-1 = everyone)
+exports.rps_core:Notify(source, 'You were fined $500', 'error')
+```
+
+Types are ox_lib's `inform`, `success`, `error` and `warning`; `info`, `primary` and `warn` are accepted too. The table form takes any `lib.notify` field, such as `icon`, `iconColor` or `style`.
 
 ### State bags
 
@@ -307,7 +337,7 @@ These are used between the framework's own server and client files. Don't trigge
 
 | Event | Direction |
 | --- | --- |
-| `rps_core:client:setAccounts`, `setJob`, `setGroup`, `setMeta`, `logout` | server to client |
+| `rps_core:client:setAccounts`, `setJob`, `setGroup`, `setMeta`, `logout`, `notify` | server to client |
 | `rps_core:getCharacters`, `createCharacter`, `deleteCharacter`, `selectCharacter` | ox_lib callbacks |
 | `rps_ambulance:server:setDead`, `respawn`, `alert`, `revive`, `heal`, `checkIn` | client to server |
 | `rps_ambulance:client:revive`, `heal`, `respawn`, `alert` | server to client |
@@ -361,15 +391,50 @@ In code, check with `player.hasPermission('group.mod')`. The server console is a
 
 ### Commands
 
+Staff (`server/admin.lua`, `client/admin.lua`):
+
 | Command | Group | Effect |
 | --- | --- | --- |
+| `/admin` | mod | Staff menu: player list (go to, bring, revive, kick; admins also set job, give money or items, kill), noclip, waypoint teleport, coords, delete vehicle, announcement, spawn vehicle |
+| `/tp x y z` | mod | Teleport to coordinates |
+| `/tpm` | mod | Teleport to your map waypoint |
+| `/goto id`, `/bring id` | mod | Teleport to a player, or a player to you |
+| `/noclip` | mod | Fly: WASD, Q/E down/up, Shift faster, Alt slower |
+| `/coords` | mod | Show your position as `vec4(...)` and copy it |
+| `/dv [radius]` | mod | Delete your vehicle or the nearest one (5 m), or every vehicle within `radius` (max 50) |
+| `/kick id [reason]` | mod | Kick a player |
+| `/announce message` | mod | Announcement to everyone |
+| `/car model` | admin | Spawn a vehicle (replaces the one you're driving) |
+| `/kill id` | admin | Kill a player |
 | `/setjob id job [grade]` | admin | Set a player's job and grade |
 | `/givemoney id account amount` | admin | Add money to an account |
+| `/setmoney id account amount` | admin | Set a balance |
+| `/removemoney id account amount` | admin | Take money from an account |
+| `/giveitem id item [count]` | admin | Give an ox_inventory item |
+| `/clearinv id` | admin | Empty a player's inventory |
 | `/setgroup id group` | admin | Change a player's permission group |
-| `/adrevive [id]` | admin | Revive or heal a player, or yourself |
-| `/logout` | everyone | Save and return to character selection |
-| `/revive` | ambulance job | CPR on the closest downed player (uses a medkit) |
-| `/heal` | ambulance job | Treat the closest conscious player (uses a bandage) |
+| `/adrevive [id]` | admin | Revive or heal a player, or yourself (rps_ambulance) |
+
+Players (`server/commands.lua`, `client/commands.lua`):
+
+| Command | Effect |
+| --- | --- |
+| `/id` | Your server ID |
+| `/job` | Your job, grade and duty status |
+| `/cash`, `/bank` | Your balances |
+| `/duty` | Go on or off duty |
+| `/givecash id amount` | Hand cash to a player within `Config.Commands.giveCashDistance` |
+| `/me text`, `/do text` | Action or scene text above your head for nearby players |
+| `/ooc message` | Out-of-character chat to everyone |
+| `/report message` | Message to online staff (mod and up), with a cooldown |
+| `/logout` | Save and return to character selection |
+| `/revive`, `/heal` | Ambulance job only (rps_ambulance): CPR on the closest downed player, or treat the closest conscious player |
+
+### Hunger and thirst
+
+`server/needs.lua` lowers `hunger` and `thirst` (0-100, in character metadata) every `Config.Needs.interval` seconds, except while the player is downed. At 0 the player loses `Config.Needs.damage` health every `damageInterval` seconds. Because the values are metadata, every HUD sees them, including QB, ESX and Qbox HUDs through the bridges.
+
+Food and drink are ox_inventory items with a `client.status`, for example `status = { hunger = 200000 }`, which restores 20 points. The server only accepts the client's report alongside its own record that the player used an item, so eating can't be faked. To set amounts on the server instead, list the item in `Config.Needs.items`: `burger = { hunger = 25 }`. Other resources can change needs with `Core.AddNeeds(player, { hunger = 10 })` inside rps_core, or `player.setMeta('hunger', value)`.
 
 ## rps_ambulance
 
@@ -408,6 +473,27 @@ Injured players who aren't downed can pay `CheckIn.fee` at the marker to restore
 | `Revive(source)` | server | Revives the player, no checks |
 | `IsDead()` | client | boolean for the local player |
 | `medkit()` | client | Called by the medkit item |
+
+### Stress
+
+`stress` (0-100) is character metadata like hunger and thirst. It rises while shooting (`Config.Stress.shootingGain` per second of fire) and while driving over `speedingThreshold` mph (`speedingGain` every 10 seconds), except for on-duty jobs in `ignoreJobs` and weapons in `ignoreWeapons`. It falls by `decay` every `decayInterval` seconds, and when an item listed in `Config.Stress.items` is used. From `effectsAt` the camera shakes now and then, more often as stress rises; from `blurAt` the screen also blurs briefly.
+
+Other resources change it with `exports.rps_core:AddStress(source, amount)` and `RemoveStress(source, amount)`. QBCore scripts that trigger `hud:server:GainStress` / `hud:server:RelieveStress` (the ps-hud / qb-hud events) work unchanged. Gains reported by clients are capped at `maxClientChange` and rate limited.
+
+## HUD (rps_hud)
+
+`rps_hud` is ps-hud 2.1.2 (Project Sloth, GPL-3.0) ported from QBCore to rps_core. It shows once a character is loaded (`isLoggedIn`).
+
+- **Status icons:** health, armor, hunger, thirst and stress from rps_core metadata, stamina and oxygen, voice (pma-voice range, talking and radio), armed, parachute, and harness, nitro and cruise when another resource reports them. Downed state comes from rps_ambulance.
+- **Vehicle panel:** speed (`Config.UseMPH`), fuel, altitude in aircraft, and seatbelt with a script that fires `seatbelt:client:ToggleSeatbelt`. Fuel reads ox_fuel's `fuel` state bag first, then the `GetFuel` export of `Config.FuelScript` if it runs, then the game value. A low-fuel warning repeats every minute below 20%.
+- **Compass and streets** in vehicles (on foot too if enabled in the menu).
+- **Info panel (top right):** server ID, job and grade with an on/off duty dot, cash and bank. A balance flashes and shows +$ / -$ when it changes.
+- **Minimap:** GTA's minimap by default (`Config.CustomMinimap = false`), square or circle, and draggable in Edit Layout: it follows the drag live and the position is saved per player. If the Map box doesn't sit on the map at your resolution, Shift + drag the box once to line it up (the map stays put). With `Config.CustomMinimap = true` GTA's minimap is hidden and rps_hud draws its own from map tiles: it rotates with the camera and shows your arrow, north, nearby blips and the waypoint, square or round per the menu. Tiles go in `rps_hud/svelte-source/public/map/styleAtlas/` (see the README there) and are built into `html/map/`; without them the map shows only water colour. `Config.MinimapMeters` sets how far it shows. With `CustomMinimap = false` the GTA minimap is used, square or circle via the textures in `stream/`. Either way it shows in vehicles, and on foot if enabled in the menu.
+- **Settings menu:** press **I** (`Config.OpenMenu`). Each player picks icon shapes, colours and what to show; `/resethud` restarts the HUD. With `Config.AdminOnly = true`, only admins change the icon styles and they are saved to `uiconfig.lua` for everyone.
+- **Edit Layout** (menu sidebar): drag the status icons, vehicle panel, compass, ID/job/money panel and the minimap anywhere on a snapping grid. Esc or Done saves, Reset restores the defaults. Positions are saved per player.
+- **`/dev`** (admin) shows developer mode; **G** toggles the engine.
+
+Stress gain and its screen effects are rps_core's (`Config.Stress`); the HUD only displays stress. `/cash` and `/bank` are rps_core's commands. Menu sounds need interact-sound; seatbelt, cruise and harness icons need qb-smallresources or a script firing the same events. See `rps_hud/README.md` for every change from ps-hud.
 
 ## Inventory (ox_inventory)
 
@@ -611,7 +697,7 @@ Name new resources with the `rps_` prefix and their events `rps_<resource>:serve
 
 - Not tested on a live server yet; spawn coordinates, the selection camera and the hospital points need checking in-game.
 - Restarting `rps_core` while players are online isn't supported. Restart the whole server instead.
-- No HUD, needs system or garages yet. Jobs track on-duty status, but there's no duty toggle of rps_core's own (QB/Qbox scripts can toggle it through the bridges). Job outfits treat every employee as on duty.
+- No HUD of its own or garages yet (any QB/ESX/Qbox HUD works through the bridges). Job outfits treat every employee as on duty.
 - The framework bridges cover the commonly used QBCore, ESX and Qbox APIs, not every function. Scripts that rely on a framework's database tables (for example `players` or `owned_vehicles`) won't work without changes.
 - Callbacks and network events have no rate limiting.
 
