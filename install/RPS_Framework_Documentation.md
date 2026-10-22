@@ -26,8 +26,8 @@ Design principles:
   server/commands.lua      admin and player commands
   server/exports.lua       public exports
   client/main.lua          PlayerData and sync events
-  client/spawn.lua         selection camera and spawning
-  client/characters.lua    character menu
+  client/spawn.lua         spawning a loaded character
+  client/characters.lua    loads the character rps_multicharacter picks; logout
   sql/                     schema and migrations (also in install/sql)
 
 [rps]/rps_ambulance/
@@ -38,6 +38,12 @@ Design principles:
   client/ems.lua           /revive, /heal, medkit item, distress alerts
   client/hospital.lua      hospital blip and check-in point
   client/supplies.lua      EMS locker and supply shop points
+
+[rps]/rps_multicharacter/  (required: rps_core has no character menu of its own)
+  fxmanifest.lua
+  config.lua               preview spot, camera, default models, join delay
+  server/main.lua          saved appearance for the preview ped
+  client/main.lua          selection scene, preview ped, create / delete / play menu
 
 install/ox_inventory/modules/bridge/rps/
   server.lua, client.lua   copied into ox_inventory
@@ -78,6 +84,7 @@ ensure rps_core
 ensure ox_inventory
 ensure illenium-appearance
 ensure rps_ambulance
+ensure rps_multicharacter
 
 add_ace resource.ox_lib command.add_ace allow
 add_ace resource.ox_lib command.remove_ace allow
@@ -107,7 +114,6 @@ All settings live in `rps_core/shared/config.lua` and `rps_ambulance/config.lua`
 | `Groups` | user, mod, admin | Permission groups from lowest to highest; each inherits the ones below |
 | `DefaultModel` | freemode male and female | Ped model by sex, used until illenium-appearance applies the saved look |
 | `DefaultSpawn` | vec4 near Legion Square | First spawn for new characters |
-| `SelectionScene` | coords, rot, fov | Camera behind the character menu |
 | `SaveInterval` | 300000 ms | Auto-save period for all loaded players |
 | `PaycheckInterval` | 900000 ms | How often salaries are paid to bank |
 | `Jobs` | in `shared/jobs.lua` | Job definitions (see Jobs, groups and permissions) |
@@ -154,7 +160,7 @@ Connecting ──► Character menu ──► Load character ──► Spawned �
 3. **Load character.** `rps_core:selectCharacter` loads the row, checks it belongs to the license and isn't already loaded, reads the user's group, and calls `Core.CreatePlayer`. The player is added to `Core.Players`, ACE principals and state bags are set, and `rps_core:server:playerLoaded` fires. ox_inventory loads the inventory on this event.
 4. **Spawned.** The client sets the ped model, places the player at their saved position (or `DefaultSpawn`), waits for collision, and fires `rps_core:client:playerLoaded`. With illenium-appearance running, the screen stays faded out until the saved look is applied; a new character gets the appearance editor first.
 5. **Playing.** All loaded players are saved every `SaveInterval` and paid their salary every `PaycheckInterval`.
-6. **Logout or disconnect.** `Core.UnloadPlayer` saves, removes the group principal, clears state bags, removes the player from memory, and fires `rps_core:server:playerUnloaded`. ox_inventory saves and unloads the inventory. After `/logout` the client returns to the character menu.
+6. **Logout or disconnect.** `Core.UnloadPlayer` saves, removes the group principal, clears state bags, removes the player from memory, and fires `rps_core:server:playerUnloaded`. ox_inventory saves and unloads the inventory. After `/logout` the client returns to rps_multicharacter's selection screen.
 
 When txAdmin announces a shutdown, every loaded player is saved. Restarting `rps_core` itself while players are online is not supported.
 

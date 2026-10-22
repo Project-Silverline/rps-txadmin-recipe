@@ -2,7 +2,7 @@ $engine: 3
 $minFxVersion: 12913
 $onesync: "on"
 name: RPS Framework
-version: 0.3.5
+version: 0.3.6
 author: RPS
 description: |
   Lightweight roleplay framework: characters, money, jobs and permissions (rps_core),
@@ -199,10 +199,13 @@ tasks:
       ensure ox_lib
 
       ## RPS framework start order
+
       ensure rps_core
+
       ensure ox_inventory
+    
       ensure [rps]
-      ensure [ox]
+
       ensure [standalone]
 
       ## Permissions
