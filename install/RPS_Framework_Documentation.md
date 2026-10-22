@@ -185,6 +185,24 @@ end
 | `GetPlayerByCharId(charId)` | Player object or `nil` |
 | `GetPlayers()` | Array of server IDs with a loaded character |
 | `GetJobs()` | The `Config.Jobs` table |
+| `GetGroups()` | `Config.Groups`, lowest to highest |
+| `HasGroup(source, group)` | true if the player's group is `group` or higher |
+| `RegisterUsableItem(name, cb, style?)` | Runs `cb` when the item is used from ox_inventory (see below) |
+| `CanUseItem(name)` | true if a usable-item callback is registered |
+| `UseItem(source, name, slot)` | Runs the registered callback (ox_inventory calls this) |
+| `Logout(source)` | Saves, unloads and sends the player back to character selection |
+
+### Usable items
+
+Items that have no client or server export of their own in `ox_inventory/data/items.lua` are handed to rps_core when used. Register a callback for them:
+
+```lua
+exports.rps_core:RegisterUsableItem('lockpick', function(source, slot)
+    -- slot = { name, label, count, slot, metadata, weight }
+end)
+```
+
+`style` is `'rps'` by default. The framework bridges register with `'qb'` and `'esx'` so QB and ESX scripts receive the arguments they expect. Callbacks run in their own thread, so they may wait.
 
 ### Player object
 
@@ -199,8 +217,9 @@ Three fixed fields are safe to read directly: `player.source`, `player.charId` a
 | `addMoney(account, amount, reason?)` | boolean | Amount is floored; must be above 0 |
 | `removeMoney(account, amount, reason?)` | boolean | false if the balance is too low |
 | `setMoney(account, amount, reason?)` | boolean | Amount must be 0 or more |
-| `getJob()` | table | `name`, `label`, `grade`, `gradeLabel`, `salary`, `boss` |
-| `setJob(name, grade?)` | boolean | false if the job or grade doesn't exist |
+| `getJob()` | table | `name`, `label`, `grade`, `gradeLabel`, `salary`, `boss`, `onduty` |
+| `setJob(name, grade?)` | boolean | false if the job or grade doesn't exist; duty resets to the job's `defaultDuty` |
+| `setDuty(onduty)` | nil | Not saved: every session starts on the job's default |
 | `getGroup()` | string | Current permission group |
 | `setGroup(name)` | boolean | Updates ACE principals and the database |
 | `hasPermission(ace)` | boolean | Wraps `IsPlayerAceAllowed` |
@@ -231,6 +250,7 @@ The server sets these replicated state bags on every loaded player, so any clien
 | --- | --- | --- |
 | `job` | Same table as `getJob()` | rps_core |
 | `group` | Group name | rps_core |
+| `isLoggedIn` | boolean, true while a character is loaded (QB/Qbox scripts read it) | rps_core |
 | `isDead` | boolean | rps_ambulance |
 | `dead` | boolean, read by ox_inventory | rps_ambulance |
 
@@ -257,7 +277,8 @@ Public events are local events: listen to them with `AddEventHandler` on the sam
 | `rps_core:server:playerLoaded` | `src`, `player` | A character finishes loading |
 | `rps_core:server:playerUnloaded` | `src`, `charId` | A character is saved and removed (logout or disconnect) |
 | `rps_core:server:moneyChanged` | `src`, `account`, `balance`, `change`, `reason` | Any balance changes; `change` is negative for removals |
-| `rps_core:server:jobChanged` | `src`, `newJob`, `oldJob` | `setJob` succeeds |
+| `rps_core:server:jobChanged` | `src`, `newJob`, `oldJob` | `setJob` succeeds or duty changes |
+| `rps_core:server:metaChanged` | `src`, `key`, `value` | `setMeta` is called |
 | `rps_core:server:characterDeleted` | `charId`, `license` | A player deletes a character; clean up rows keyed by `charId` |
 
 ### Client events
@@ -516,6 +537,18 @@ RegisterNetEvent('rps_shop:server:buy', function(itemName)
 end)
 ```
 
+## Framework bridges (QBCore, ESX, Qbox)
+
+rps_core can run scripts written for QBCore, ESX Legacy and Qbox, all at the same time. The bridges live in `rps_core/bridge/qb`, `bridge/esx` and `bridge/qbx` and are always on. They only translate: characters, money, jobs and metadata stay in rps_core, items in ox_inventory, and UI in ox_lib.
+
+- **Exports:** `exports['qb-core']`, `exports.es_extended` and `exports.qbx_core` calls are answered by rps_core.
+- **Detection and dependencies:** rps_core's manifest declares `provide 'qb-core'`, `provide 'es_extended'` and `provide 'qbx_core'`, so scripts that check for or depend on those frameworks find rps_core. Never run the real frameworks next to rps_core.
+- **Shared data:** a character's cash, bank, job, metadata and items are the same whichever framework a script uses. An ESX script paying a player shows up in a QB script straight away.
+- **Mapping:** QB/Qbox `citizenid` is the character id as a string. QB `cash`/`bank` and ESX `money`/`bank` are rps `cash`/`bank`. ESX `black_money` is the ox_inventory `black_money` item. Gangs don't exist (`none`). Usable items go through rps_core's usable-item registry.
+- **Included files:** ESX and Qbox scripts that load framework files by path (`@es_extended/imports.lua`, `@qbx_core/modules/lib.lua`) get them from rps_core. If a script can't find one, change its path to `@rps_core/imports.lua` or `@rps_core/modules/lib.lua`.
+
+Each bridge's README (`rps_core/bridge/<name>/README.md`) lists exactly what is and isn't supported.
+
 ## Building on RPS
 
 A new feature is its own resource that depends on `rps_core`, calls its exports, and listens to its events. Put it in the `[rps]` folder. This minimal example pays a $50 bonus once per session to anyone loading in as police.
@@ -578,7 +611,8 @@ Name new resources with the `rps_` prefix and their events `rps_<resource>:serve
 
 - Not tested on a live server yet; spawn coordinates, the selection camera and the hospital points need checking in-game.
 - Restarting `rps_core` while players are online isn't supported. Restart the whole server instead.
-- No HUD, needs system, garages or on-duty toggle yet. Job outfits treat every employee as on duty.
+- No HUD, needs system or garages yet. Jobs track on-duty status, but there's no duty toggle of rps_core's own (QB/Qbox scripts can toggle it through the bridges). Job outfits treat every employee as on duty.
+- The framework bridges cover the commonly used QBCore, ESX and Qbox APIs, not every function. Scripts that rely on a framework's database tables (for example `players` or `owned_vehicles`) won't work without changes.
 - Callbacks and network events have no rate limiting.
 
 ## Roadmap

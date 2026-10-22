@@ -2,7 +2,7 @@ $engine: 3
 $minFxVersion: 12913
 $onesync: "on"
 name: RPS Framework
-version: 0.3.6
+version: 0.3.7
 author: RPS
 description: |
   Lightweight roleplay framework: characters, money, jobs and permissions (rps_core),
@@ -141,6 +141,21 @@ tasks:
               rotation = 50,
               usePoly = false,
           },
+
+  # The qb-core / es_extended bridges make illenium-appearance think QBCore or ESX
+  # is running, which would start its own QB/ESX code next to the rps bridge.
+  # Ignore those frameworks whenever rps_core is installed.
+  - action: replace_string
+    mode: literal
+    file: ./resources/[standalone]/illenium-appearance/shared/framework/framework.lua
+    search: 'return GetResourceState\("es_extended"\) ~= "missing"'
+    replace: 'return GetResourceState("rps_core") == "missing" and GetResourceState("es_extended") ~= "missing"'
+
+  - action: replace_string
+    mode: literal
+    file: ./resources/[standalone]/illenium-appearance/shared/framework/framework.lua
+    search: 'return GetResourceState\("qb-core"\) ~= "missing"'
+    replace: 'return GetResourceState("rps_core") == "missing" and GetResourceState("qb-core") ~= "missing"'
 
   # --- ox.cfg (Overextended settings, exec'd from server.cfg) --------------------
   - action: write_file

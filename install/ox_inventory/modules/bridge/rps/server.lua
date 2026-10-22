@@ -93,6 +93,13 @@ function server.syncInventory(inv)
     end
 end
 
+-- Items with no export of their own: run whatever rps_core has registered for them
+-- (rps resources, or QB / ESX / Qbox scripts through the bridges)
+---@diagnostic disable-next-line: duplicate-set-field
+function server.UseItem(source, itemName, data)
+    return RPS:UseItem(source, itemName, data)
+end
+
 ---@diagnostic disable-next-line: duplicate-set-field
 function server.setPlayerData(player)
     return {
