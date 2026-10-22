@@ -2,7 +2,7 @@ $engine: 3
 $minFxVersion: 12913
 $onesync: "on"
 name: RPS Framework
-version: 0.3.0
+version: 0.3.1
 author: RPS
 description: |
   Lightweight roleplay framework: characters, money, jobs and permissions (rps_core),
@@ -49,7 +49,16 @@ tasks:
   # --- RPS framework, from its own GitHub repo -------------------------------
   # CHANGE THIS: your GitHub user/repo for the framework, and the tag or branch to deploy.
   - action: download_github
-    src: https://github.com/YOUR_GITHUB_USER/rps-framework
+    src: https://github.com/Project-Silverline/rps_core
+    ref: main
+    dest: ./tmp/rps
+
+  - action: move_path
+    src: ./tmp/rps/[rps]
+    dest: ./resources/[rps]
+
+  - action: download_github
+    src: https://github.com/Project-Silverline/rps_core
     ref: main
     dest: ./tmp/rps
 
@@ -59,8 +68,8 @@ tasks:
 
   # --- ox_inventory: rps bridge, table mapping, medkit item --------------------
   - action: copy_path
-    src: ./tmp/rps/install/ox_inventory
-    dest: ./resources/[ox]/ox_inventory
+    src: ./tmp/install/ox_inventory/modules/bridge/rps
+    dest: ./resources/[ox]/ox_inventory/modules/bridge
 
   - action: replace_string
     mode: literal
@@ -94,8 +103,12 @@ tasks:
 
   # --- illenium-appearance: rps bridge, manifest entries, EMS changing room ----
   - action: copy_path
-    src: ./tmp/rps/install/illenium-appearance
-    dest: ./resources/[standalone]/illenium-appearance
+    src: ./tmp/install/illenium-appearance/client/framework/rps
+    dest: ./resources/[standalone]/illenium-appearance/client/framework'
+
+  - action: copy_path
+    src: ./tmp/install/illenium-appearance/server/framework/rps
+    dest: ./resources/[standalone]/illenium-appearance/server/framework
 
   - action: replace_string
     mode: literal
@@ -197,7 +210,7 @@ tasks:
 
   # --- Docs and clean-up --------------------------------------------------------
   - action: move_path
-    src: ./tmp/rps/install
+    src: ./tmp/install
     dest: ./rps-install
 
   - action: remove_path
